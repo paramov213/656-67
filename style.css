@@ -44,7 +44,6 @@ body {
   gap: 16px;
 }
 
-/* Glassmorphism База */
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
@@ -54,7 +53,6 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-/* Header */
 .header {
   padding: 16px;
   display: flex;
@@ -116,7 +114,6 @@ body {
   margin-top: 4px;
 }
 
-/* Поиск */
 .search-section {
   position: relative;
   display: flex;
@@ -175,7 +172,6 @@ body {
   object-fit: cover;
 }
 
-/* Мои чаты (Горизонтальный список) */
 .chats-section {
   display: flex;
   flex-direction: column;
@@ -194,11 +190,11 @@ body {
   overflow-x: auto;
   gap: 12px;
   padding-bottom: 8px;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none; 
 }
 
 .horizontal-scroll::-webkit-scrollbar {
-  display: none; /* Chrome, Safari */
+  display: none; 
 }
 
 .chat-bubble {
@@ -233,7 +229,6 @@ body {
   max-width: 64px;
 }
 
-/* Окно чата */
 .chat-window {
   flex-grow: 1;
   display: flex;
@@ -324,7 +319,6 @@ body {
   outline: none;
 }
 
-/* Инпут зона */
 .message-input-area {
   padding: 12px 16px;
   display: flex;
