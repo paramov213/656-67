@@ -1,31 +1,12 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-  getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, 
-  onSnapshot, addDoc, serverTimestamp, orderBy 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { 
-  getStorage, ref, uploadBytesResumable, getDownloadURL 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+// Firebase больше не нужен, используем встроенный в браузер IndexedDB
+const DB_NAME = 'GlassMessengerLocalDB';
+const DB_VERSION = 1;
 
-// !!! ВСТАВЬ СВОЙ КОНФИГ СЮДА !!!
-const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "твое-приложение.firebaseapp.com",
-  projectId: "твое-приложение",
-  storageBucket: "твое-приложение.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
+let db;
 let myId = localStorage.getItem('myDeviceId');
 let myProfile = JSON.parse(localStorage.getItem('myProfile')) || { nickname: '', avatar: 'https://via.placeholder.com/150/333333/FFFFFF?text=?' };
 let activeChatUserId = null;
 let activeChatId = null;
-let unsubscribeMessages = null;
 
 const elements = {
   myAvatar: document.getElementById('my-avatar'),
@@ -51,7 +32,40 @@ const elements = {
   sendBtn: document.getElementById('send-btn')
 };
 
+// Инициализация локальной базы данных IndexedDB
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = (event) => {
+      console.error("Ошибка базы данных:", event.target.error);
+      reject(event.target.error);
+    };
+
+    request.onsuccess = (event) => {
+      db = event.target.result;
+      resolve(db);
+    };
+
+    request.onupgradeneeded = (event) => {
+      const database = event.target.result;
+      // Хранилище профилей
+      if (!database.objectStoreNames.contains('users')) {
+        database.createObjectStore('users', { keyPath: 'id' });
+      }
+      // Хранилище сообщений
+      if (!database.objectStoreNames.contains('messages')) {
+        const msgStore = database.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+        msgStore.createIndex('chatId', 'chatId', { unique: false });
+        msgStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+    };
+  });
+}
+
 async function init() {
+  await initDB();
+
   if (!myId) {
     myId = Math.random().toString(36).substring(2, 8).toUpperCase();
     localStorage.setItem('myDeviceId', myId);
@@ -61,43 +75,49 @@ async function init() {
   elements.myNickname.value = myProfile.nickname;
   elements.myAvatar.src = myProfile.avatar;
 
-  await syncProfileToDb();
+  await syncProfileToLocalDb();
   setupEventListeners();
   renderMyChats();
   initServiceWorker();
 }
 
-async function syncProfileToDb() {
-  try {
-    await setDoc(doc(db, "users", myId), {
-      id: myId,
-      nickname: myProfile.nickname || `User-${myId}`,
-      avatar: myProfile.avatar,
-      lastActive: serverTimestamp()
-    }, { merge: true });
-  } catch (e) {
-    console.error("Ошибка сохранения профиля:", e);
-  }
+// Конвертация файлов (картинок/аудио) в Base64 для хранения в браузере
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+}
+
+async function syncProfileToLocalDb() {
+  const transaction = db.transaction(['users'], 'readwrite');
+  const store = transaction.objectStore('users');
+  store.put({
+    id: myId,
+    nickname: myProfile.nickname || `User-${myId}`,
+    avatar: myProfile.avatar,
+    lastActive: Date.now()
+  });
 }
 
 function setupEventListeners() {
   elements.myNickname.addEventListener('blur', () => {
     myProfile.nickname = elements.myNickname.value;
     localStorage.setItem('myProfile', JSON.stringify(myProfile));
-    syncProfileToDb();
+    syncProfileToLocalDb();
   });
 
   elements.avatarBtn.addEventListener('click', () => elements.avatarUpload.click());
   elements.avatarUpload.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const url = await uploadFile(file, `avatars/${myId}_${Date.now()}`);
-      if (url) {
-        myProfile.avatar = url;
-        elements.myAvatar.src = url;
-        localStorage.setItem('myProfile', JSON.stringify(myProfile));
-        syncProfileToDb();
-      }
+      const base64Url = await fileToBase64(file);
+      myProfile.avatar = base64Url;
+      elements.myAvatar.src = base64Url;
+      localStorage.setItem('myProfile', JSON.stringify(myProfile));
+      syncProfileToLocalDb();
     }
   });
 
@@ -111,7 +131,7 @@ function setupEventListeners() {
       return;
     }
 
-    searchTimeout = setTimeout(() => performSearch(queryStr), 500);
+    searchTimeout = setTimeout(() => performSearch(queryStr), 300);
   });
 
   document.addEventListener('click', (e) => {
@@ -139,8 +159,8 @@ function setupEventListeners() {
   elements.imageUpload.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const url = await uploadFile(file, `chats/${activeChatId}/images/${Date.now()}`);
-      if (url) sendMessage(null, 'image', url);
+      const base64Url = await fileToBase64(file);
+      sendMessage(null, 'image', base64Url);
     }
   });
 
@@ -149,7 +169,6 @@ function setupEventListeners() {
   elements.closeChatBtn.addEventListener('click', () => {
     activeChatUserId = null;
     activeChatId = null;
-    if (unsubscribeMessages) unsubscribeMessages();
     elements.chatHeader.classList.add('hidden');
     elements.msgInputArea.classList.add('hidden');
     elements.messagesArea.innerHTML = '';
@@ -158,54 +177,34 @@ function setupEventListeners() {
   });
 }
 
+// Так как серверов нет, поиск просто создает локальный "контакт" с введенным ID
 async function performSearch(queryStr) {
-  try {
-    elements.searchResults.innerHTML = '<div class="search-result-item" style="justify-content:center;">Загрузка...</div>';
-    elements.searchResults.classList.remove('hidden');
+  elements.searchResults.innerHTML = '';
+  elements.searchResults.classList.remove('hidden');
 
-    const q = query(
-      collection(db, "users"),
-      where("id", ">=", queryStr),
-      where("id", "<=", queryStr + '\uf8ff')
-    );
-    const querySnapshot = await getDocs(q);
-    
-    elements.searchResults.innerHTML = '';
-    
-    if (querySnapshot.empty) {
-      elements.searchResults.innerHTML = '<div class="search-result-item">Ничего не найдено</div>';
-      return;
-    }
-
-    querySnapshot.forEach((docSnap) => {
-      const user = docSnap.data();
-      if (user.id === myId) return;
-
-      const el = document.createElement('div');
-      el.className = 'search-result-item';
-      el.innerHTML = `
-        <img src="${user.avatar || 'https://via.placeholder.com/150'}" alt="av">
-        <div>
-          <div style="font-weight: 500">${user.nickname}</div>
-          <div style="font-size: 12px; color: var(--text-muted)">ID: ${user.id}</div>
-        </div>
-      `;
-      el.addEventListener('click', () => {
-        elements.searchResults.classList.add('hidden');
-        elements.searchInput.value = '';
-        saveChatLocally(user);
-        openChat(user);
-      });
-      elements.searchResults.appendChild(el);
-    });
-    
-    if (elements.searchResults.innerHTML === '') {
-      elements.searchResults.innerHTML = '<div class="search-result-item">Ничего не найдено</div>';
-    }
-
-  } catch (error) {
-    console.error("Search error:", error);
-  }
+  const el = document.createElement('div');
+  el.className = 'search-result-item';
+  el.innerHTML = `
+    <img src="https://via.placeholder.com/150/1A1A24/0A84FF?text=${queryStr.charAt(0)}" alt="av">
+    <div>
+      <div style="font-weight: 500">Локальный чат: ${queryStr}</div>
+      <div style="font-size: 12px; color: var(--text-muted)">ID: ${queryStr}</div>
+    </div>
+  `;
+  
+  el.addEventListener('click', () => {
+    const mockUser = { 
+      id: queryStr, 
+      nickname: `Чат ${queryStr}`, 
+      avatar: `https://via.placeholder.com/150/1A1A24/0A84FF?text=${queryStr.charAt(0)}` 
+    };
+    elements.searchResults.classList.add('hidden');
+    elements.searchInput.value = '';
+    saveChatLocally(mockUser);
+    openChat(mockUser);
+  });
+  
+  elements.searchResults.appendChild(el);
 }
 
 function saveChatLocally(user) {
@@ -247,16 +246,23 @@ async function openChat(user) {
   elements.chatName.textContent = user.nickname;
   elements.chatId.textContent = `ID: ${user.id}`;
 
-  if (unsubscribeMessages) unsubscribeMessages();
+  await loadLocalMessages();
+}
 
-  const q = query(collection(db, `chats/${activeChatId}/messages`), orderBy("timestamp", "asc"));
-  unsubscribeMessages = onSnapshot(q, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        renderMessage(change.doc.data());
-      }
-    });
-  });
+async function loadLocalMessages() {
+  if (!activeChatId) return;
+
+  const transaction = db.transaction(['messages'], 'readonly');
+  const store = transaction.objectStore('messages');
+  const index = store.index('chatId');
+  const request = index.getAll(activeChatId);
+
+  request.onsuccess = () => {
+    const messages = request.result;
+    // Сортируем по времени
+    messages.sort((a, b) => a.timestamp - b.timestamp);
+    messages.forEach(renderMessage);
+  };
 }
 
 async function sendTextMessage() {
@@ -272,17 +278,20 @@ async function sendTextMessage() {
 async function sendMessage(text, type, fileUrl) {
   if (!activeChatId) return;
 
-  try {
-    await addDoc(collection(db, `chats/${activeChatId}/messages`), {
-      senderId: myId,
-      text: text || '',
-      type: type, 
-      fileUrl: fileUrl || '',
-      timestamp: serverTimestamp()
-    });
-  } catch (error) {
-    console.error("Ошибка отправки:", error);
-  }
+  const messageData = {
+    chatId: activeChatId,
+    senderId: myId,
+    text: text || '',
+    type: type, 
+    fileUrl: fileUrl || '',
+    timestamp: Date.now()
+  };
+
+  const transaction = db.transaction(['messages'], 'readwrite');
+  const store = transaction.objectStore('messages');
+  store.add(messageData);
+
+  renderMessage(messageData);
 }
 
 function renderMessage(msg) {
@@ -299,25 +308,6 @@ function renderMessage(msg) {
 
   elements.messagesArea.appendChild(div);
   elements.messagesArea.scrollTop = elements.messagesArea.scrollHeight;
-}
-
-async function uploadFile(file, path) {
-  return new Promise((resolve, reject) => {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    uploadTask.on('state_changed', 
-      null, 
-      (error) => {
-        console.error("Upload error:", error);
-        reject(error);
-      }, 
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
-      }
-    );
-  });
 }
 
 let mediaRecorder;
@@ -339,9 +329,8 @@ async function setupVoiceRecording() {
 
         mediaRecorder.onstop = async () => {
           const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          const file = new File([audioBlob], "voice.webm", { type: 'audio/webm' });
-          const url = await uploadFile(file, `chats/${activeChatId}/audio/${Date.now()}.webm`);
-          if (url) sendMessage(null, 'audio', url);
+          const base64Audio = await fileToBase64(audioBlob);
+          sendMessage(null, 'audio', base64Audio);
         };
 
         mediaRecorder.start();
@@ -365,13 +354,11 @@ function initServiceWorker() {
       navigator.serviceWorker.register('/sw.js')
         .then(registration => {
           console.log('SW зарегистрирован:', registration.scope);
-          if ('Notification' in window && Notification.permission !== 'granted') {
-             Notification.requestPermission();
-          }
         })
         .catch(err => console.error('Ошибка SW:', err));
     });
   }
 }
 
+// Запускаем
 init();
