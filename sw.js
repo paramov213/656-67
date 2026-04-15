@@ -39,7 +39,6 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Обработка Push-уведомлений (требует настройки Firebase Cloud Messaging на клиенте)
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : { title: 'Новое сообщение', body: 'Вам прислали сообщение' };
   event.waitUntil(
