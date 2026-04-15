@@ -1,7 +1,7 @@
 {
   "name": "Glass Messenger",
   "short_name": "Messenger",
-  "description": "Messenger",
+  "description": "Premium PWA Messenger with Glassmorphism",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#0d0d12",
