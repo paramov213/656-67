@@ -21,14 +21,12 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Глобальные переменные
 let myId = localStorage.getItem('myDeviceId');
 let myProfile = JSON.parse(localStorage.getItem('myProfile')) || { nickname: '', avatar: 'https://via.placeholder.com/150/333333/FFFFFF?text=?' };
 let activeChatUserId = null;
 let activeChatId = null;
 let unsubscribeMessages = null;
 
-// DOM Элементы
 const elements = {
   myAvatar: document.getElementById('my-avatar'),
   avatarUpload: document.getElementById('avatar-upload'),
@@ -53,7 +51,6 @@ const elements = {
   sendBtn: document.getElementById('send-btn')
 };
 
-// Инициализация
 async function init() {
   if (!myId) {
     myId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -70,7 +67,6 @@ async function init() {
   initServiceWorker();
 }
 
-// Синхронизация профиля с Firestore
 async function syncProfileToDb() {
   try {
     await setDoc(doc(db, "users", myId), {
@@ -84,16 +80,13 @@ async function syncProfileToDb() {
   }
 }
 
-// Слушатели событий
 function setupEventListeners() {
-  // Обновление ника
   elements.myNickname.addEventListener('blur', () => {
     myProfile.nickname = elements.myNickname.value;
     localStorage.setItem('myProfile', JSON.stringify(myProfile));
     syncProfileToDb();
   });
 
-  // Загрузка аватарки
   elements.avatarBtn.addEventListener('click', () => elements.avatarUpload.click());
   elements.avatarUpload.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -108,7 +101,6 @@ function setupEventListeners() {
     }
   });
 
-  // Живой поиск
   let searchTimeout;
   elements.searchInput.addEventListener('input', (e) => {
     clearTimeout(searchTimeout);
@@ -122,14 +114,12 @@ function setupEventListeners() {
     searchTimeout = setTimeout(() => performSearch(queryStr), 500);
   });
 
-  // Закрытие поиска при клике вне
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-section')) {
       elements.searchResults.classList.add('hidden');
     }
   });
 
-  // Логика ввода сообщений (переключение микрофон/отправить)
   elements.msgInput.addEventListener('input', (e) => {
     if (e.target.value.trim().length > 0) {
       elements.voiceBtn.classList.add('hidden');
@@ -140,13 +130,11 @@ function setupEventListeners() {
     }
   });
 
-  // Отправка текста
   elements.sendBtn.addEventListener('click', () => sendTextMessage());
   elements.msgInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendTextMessage();
   });
 
-  // Отправка картинки
   elements.attachBtn.addEventListener('click', () => elements.imageUpload.click());
   elements.imageUpload.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -156,10 +144,8 @@ function setupEventListeners() {
     }
   });
 
-  // Голосовые сообщения
   setupVoiceRecording();
 
-  // Закрыть чат
   elements.closeChatBtn.addEventListener('click', () => {
     activeChatUserId = null;
     activeChatId = null;
@@ -172,13 +158,11 @@ function setupEventListeners() {
   });
 }
 
-// Функция поиска
 async function performSearch(queryStr) {
   try {
     elements.searchResults.innerHTML = '<div class="search-result-item" style="justify-content:center;">Загрузка...</div>';
     elements.searchResults.classList.remove('hidden');
 
-    // Поскольку мы ищем по ID (строке), используем >= и <= для поиска по префиксу
     const q = query(
       collection(db, "users"),
       where("id", ">=", queryStr),
@@ -195,7 +179,7 @@ async function performSearch(queryStr) {
 
     querySnapshot.forEach((docSnap) => {
       const user = docSnap.data();
-      if (user.id === myId) return; // Не показываем себя
+      if (user.id === myId) return;
 
       const el = document.createElement('div');
       el.className = 'search-result-item';
@@ -224,7 +208,6 @@ async function performSearch(queryStr) {
   }
 }
 
-// Сохранение контакта и рендер ленты
 function saveChatLocally(user) {
   let chats = JSON.parse(localStorage.getItem('my_chats')) || [];
   const exists = chats.find(c => c.id === user.id);
@@ -251,11 +234,8 @@ function renderMyChats() {
   });
 }
 
-// Открытие переписки
 async function openChat(user) {
   activeChatUserId = user.id;
-  
-  // Генерируем уникальный ID чата для двоих (сортируем ID по алфавиту)
   activeChatId = [myId, user.id].sort().join('_');
 
   elements.chatHeader.classList.remove('hidden');
@@ -269,7 +249,6 @@ async function openChat(user) {
 
   if (unsubscribeMessages) unsubscribeMessages();
 
-  // Слушаем сообщения в реальном времени
   const q = query(collection(db, `chats/${activeChatId}/messages`), orderBy("timestamp", "asc"));
   unsubscribeMessages = onSnapshot(q, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
@@ -280,7 +259,6 @@ async function openChat(user) {
   });
 }
 
-// Отправка сообщений
 async function sendTextMessage() {
   const text = elements.msgInput.value.trim();
   if (!text) return;
@@ -298,7 +276,7 @@ async function sendMessage(text, type, fileUrl) {
     await addDoc(collection(db, `chats/${activeChatId}/messages`), {
       senderId: myId,
       text: text || '',
-      type: type, // 'text', 'image', 'audio'
+      type: type, 
       fileUrl: fileUrl || '',
       timestamp: serverTimestamp()
     });
@@ -307,7 +285,6 @@ async function sendMessage(text, type, fileUrl) {
   }
 }
 
-// Отрисовка сообщения
 function renderMessage(msg) {
   const div = document.createElement('div');
   div.className = `msg ${msg.senderId === myId ? 'my-msg' : 'their-msg'}`;
@@ -324,7 +301,6 @@ function renderMessage(msg) {
   elements.messagesArea.scrollTop = elements.messagesArea.scrollHeight;
 }
 
-// Загрузка файлов (Картинки/Голосовые/Аватары)
 async function uploadFile(file, path) {
   return new Promise((resolve, reject) => {
     const storageRef = ref(storage, path);
@@ -344,7 +320,6 @@ async function uploadFile(file, path) {
   });
 }
 
-// Голосовые сообщения (MediaRecorder)
 let mediaRecorder;
 let audioChunks = [];
 
@@ -384,14 +359,12 @@ async function setupVoiceRecording() {
   });
 }
 
-// Инициализация PWA Service Worker
 function initServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js')
         .then(registration => {
           console.log('SW зарегистрирован:', registration.scope);
-          // Запрос прав на уведомления (Android 15)
           if ('Notification' in window && Notification.permission !== 'granted') {
              Notification.requestPermission();
           }
@@ -401,5 +374,4 @@ function initServiceWorker() {
   }
 }
 
-// Запуск
 init();
