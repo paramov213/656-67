@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Glass Messenger</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    
+    <header class="glass-panel header">
+      <div class="profile-section">
+        <div class="avatar-wrapper" id="profile-avatar-btn">
+          <img id="my-avatar" src="https://via.placeholder.com/150/333333/FFFFFF?text=?" alt="Avatar">
+          <input type="file" id="avatar-upload" accept="image/*" hidden>
+        </div>
+        <div class="profile-info">
+          <input type="text" id="my-nickname" placeholder="Твой никнейм" autocomplete="off">
+          <span id="my-id-display" class="id-badge">ID: Загрузка...</span>
+        </div>
+      </div>
+      <div class="search-section">
+        <span class="material-icons search-icon">search</span>
+        <input type="text" id="search-input" placeholder="Поиск по ID..." autocomplete="off">
+        <div id="search-results" class="glass-panel hidden"></div>
+      </div>
+    </header>
+
+    <section class="chats-section">
+      <h3 class="section-title">Мои чаты</h3>
+      <div id="my-chats-list" class="horizontal-scroll">
+        </div>
+    </section>
+
+    <main class="chat-window glass-panel" id="chat-window">
+      <div class="chat-header hidden" id="active-chat-header">
+        <img id="active-chat-avatar" src="" alt="Avatar">
+        <div class="active-chat-info">
+          <h4 id="active-chat-name">Имя</h4>
+          <span id="active-chat-id">ID: </span>
+        </div>
+        <button id="close-chat-btn" class="icon-btn"><span class="material-icons">close</span></button>
+      </div>
+
+      <div class="messages-area" id="messages-area">
+        <div class="empty-state" id="empty-state-msg">Выберите чат для начала общения</div>
+        </div>
+
+      <div class="message-input-area hidden" id="message-input-area">
+        <button id="attach-btn" class="icon-btn"><span class="material-icons">attach_file</span></button>
+        <input type="file" id="image-upload" accept="image/*" hidden>
+        
+        <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off">
+        
+        <button id="voice-btn" class="icon-btn"><span class="material-icons">mic</span></button>
+        <button id="send-btn" class="icon-btn send-btn hidden"><span class="material-icons">send</span></button>
+      </div>
+    </main>
+
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
