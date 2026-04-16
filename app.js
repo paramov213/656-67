@@ -1,10 +1,10 @@
-// Firebase больше не нужен, используем встроенный в браузер IndexedDB
-const DB_NAME = 'GlassMessengerLocalDB';
+// Облако отключено. Celestra работает строго на локальной базе браузера (IndexedDB).
+const DB_NAME = 'CelestraLocalDB';
 const DB_VERSION = 1;
 
 let db;
-let myId = localStorage.getItem('myDeviceId');
-let myProfile = JSON.parse(localStorage.getItem('myProfile')) || { nickname: '', avatar: 'https://via.placeholder.com/150/333333/FFFFFF?text=?' };
+let myId = localStorage.getItem('celestraDeviceId');
+let myProfile = JSON.parse(localStorage.getItem('celestraProfile')) || { nickname: '', avatar: 'https://via.placeholder.com/150/333333/FFFFFF?text=?' };
 let activeChatUserId = null;
 let activeChatId = null;
 
@@ -32,13 +32,12 @@ const elements = {
   sendBtn: document.getElementById('send-btn')
 };
 
-// Инициализация локальной базы данных IndexedDB
 function initDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = (event) => {
-      console.error("Ошибка базы данных:", event.target.error);
+      console.error("Ошибка инициализации Celestra DB:", event.target.error);
       reject(event.target.error);
     };
 
@@ -49,11 +48,9 @@ function initDB() {
 
     request.onupgradeneeded = (event) => {
       const database = event.target.result;
-      // Хранилище профилей
       if (!database.objectStoreNames.contains('users')) {
         database.createObjectStore('users', { keyPath: 'id' });
       }
-      // Хранилище сообщений
       if (!database.objectStoreNames.contains('messages')) {
         const msgStore = database.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
         msgStore.createIndex('chatId', 'chatId', { unique: false });
@@ -68,7 +65,7 @@ async function init() {
 
   if (!myId) {
     myId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    localStorage.setItem('myDeviceId', myId);
+    localStorage.setItem('celestraDeviceId', myId);
   }
   
   elements.myIdDisplay.textContent = `ID: ${myId}`;
@@ -81,7 +78,6 @@ async function init() {
   initServiceWorker();
 }
 
-// Конвертация файлов (картинок/аудио) в Base64 для хранения в браузере
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -105,7 +101,7 @@ async function syncProfileToLocalDb() {
 function setupEventListeners() {
   elements.myNickname.addEventListener('blur', () => {
     myProfile.nickname = elements.myNickname.value;
-    localStorage.setItem('myProfile', JSON.stringify(myProfile));
+    localStorage.setItem('celestraProfile', JSON.stringify(myProfile));
     syncProfileToLocalDb();
   });
 
@@ -116,7 +112,7 @@ function setupEventListeners() {
       const base64Url = await fileToBase64(file);
       myProfile.avatar = base64Url;
       elements.myAvatar.src = base64Url;
-      localStorage.setItem('myProfile', JSON.stringify(myProfile));
+      localStorage.setItem('celestraProfile', JSON.stringify(myProfile));
       syncProfileToLocalDb();
     }
   });
@@ -177,17 +173,17 @@ function setupEventListeners() {
   });
 }
 
-// Так как серверов нет, поиск просто создает локальный "контакт" с введенным ID
 async function performSearch(queryStr) {
   elements.searchResults.innerHTML = '';
   elements.searchResults.classList.remove('hidden');
 
+  // Так как Celestra теперь оффлайн, поиск инициирует создание локального пространства по ID
   const el = document.createElement('div');
   el.className = 'search-result-item';
   el.innerHTML = `
     <img src="https://via.placeholder.com/150/1A1A24/0A84FF?text=${queryStr.charAt(0)}" alt="av">
     <div>
-      <div style="font-weight: 500">Локальный чат: ${queryStr}</div>
+      <div style="font-weight: 500">Локальный узел: ${queryStr}</div>
       <div style="font-size: 12px; color: var(--text-muted)">ID: ${queryStr}</div>
     </div>
   `;
@@ -195,7 +191,7 @@ async function performSearch(queryStr) {
   el.addEventListener('click', () => {
     const mockUser = { 
       id: queryStr, 
-      nickname: `Чат ${queryStr}`, 
+      nickname: `Узел ${queryStr}`, 
       avatar: `https://via.placeholder.com/150/1A1A24/0A84FF?text=${queryStr.charAt(0)}` 
     };
     elements.searchResults.classList.add('hidden');
@@ -208,17 +204,17 @@ async function performSearch(queryStr) {
 }
 
 function saveChatLocally(user) {
-  let chats = JSON.parse(localStorage.getItem('my_chats')) || [];
+  let chats = JSON.parse(localStorage.getItem('celestra_chats')) || [];
   const exists = chats.find(c => c.id === user.id);
   if (!exists) {
     chats.unshift(user);
-    localStorage.setItem('my_chats', JSON.stringify(chats));
+    localStorage.setItem('celestra_chats', JSON.stringify(chats));
     renderMyChats();
   }
 }
 
 function renderMyChats() {
-  const chats = JSON.parse(localStorage.getItem('my_chats')) || [];
+  const chats = JSON.parse(localStorage.getItem('celestra_chats')) || [];
   elements.myChatsList.innerHTML = '';
   
   chats.forEach(user => {
@@ -259,7 +255,6 @@ async function loadLocalMessages() {
 
   request.onsuccess = () => {
     const messages = request.result;
-    // Сортируем по времени
     messages.sort((a, b) => a.timestamp - b.timestamp);
     messages.forEach(renderMessage);
   };
@@ -353,12 +348,11 @@ function initServiceWorker() {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js')
         .then(registration => {
-          console.log('SW зарегистрирован:', registration.scope);
+          console.log('SW зарегистрирован для Celestra:', registration.scope);
         })
         .catch(err => console.error('Ошибка SW:', err));
     });
   }
 }
 
-// Запускаем
 init();
